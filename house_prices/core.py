@@ -12,33 +12,35 @@ PKG_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(PKG_DIR, "data")
 TRAIN_FILEPATH = os.path.join(DATA_DIR, "train.csv")
 TEST_FILEPATH = os.path.join(DATA_DIR, "test.csv")
+SUBMISSION_FILEPATH = os.path.join(DATA_DIR, "submission.csv")
 
-df = pd.read_csv(TRAIN_FILEPATH)
+train_df = pd.read_csv(TRAIN_FILEPATH)
 
-grouped = df.groupby(df.YrSold)
+grouped = train_df.groupby(train_df.YrSold)
 grouped.SalePrice = grouped.SalePrice.aggregate([np.mean, np.std])
 mean_price_per_year = dict(zip(list(grouped.YrSold.groups.keys()), grouped.SalePrice["mean"]))
 
-model_df = df[["SalePrice", "LotArea", "TotRmsAbvGrd", "GarageArea", "YrSold"]]
-model_df.SalePrice = model_df.SalePrice.apply(np.log)
-model_df.LotArea = model_df.LotArea.apply(np.log)
-model_df.YrSold = model_df.YrSold.map(mean_price_per_year)
+train_df = train_df[["SalePrice", "LotArea", "YrSold", "OverallCond", "OverallQual", "GarageCars", "GrLivArea", "FullBath"]]
+train_df.SalePrice = train_df.SalePrice.apply(np.log)
+train_df.LotArea = train_df.LotArea.apply(np.log)
+train_df.YrSold = train_df.YrSold.map(mean_price_per_year)
 
-train_df, test_df = train_test_split(model_df)
-x_train = train_df[["LotArea", "TotRmsAbvGrd", "GarageArea", "YrSold"]]
+x_train = train_df[["LotArea", "YrSold", "OverallCond", "OverallQual", "GarageCars", "GrLivArea", "FullBath"]]
 y_train = train_df.SalePrice
-x_test = test_df[["LotArea", "TotRmsAbvGrd", "GarageArea", "YrSold"]]
-y_test = test_df.SalePrice
 
 model = LinearRegression()
 model.fit(x_train, y_train)
-y_pred = model.predict(x_test)
 
-r2 = r2_score(y_test, y_pred)
-err = mean_squared_error(y_test, y_pred)
+test_df = pd.read_csv(TEST_FILEPATH)
+test_df = test_df[["Id", "LotArea", "YrSold", "OverallCond", "OverallQual", "GarageCars", "GrLivArea", "FullBath"]]
+test_df = test_df.fillna(0)
+test_df.LotArea = test_df.LotArea.apply(np.log)
+test_df.YrSold = test_df.YrSold.map(mean_price_per_year)
+pred = model.predict(test_df[["LotArea", "YrSold", "OverallCond", "OverallQual", "GarageCars", "GrLivArea", "FullBath"]])
 
-print("Variance explained = {}".format(round(r2, 4)))
-print("Root mean squared error = {}".format(round(err, 4)))
-plt.figure()
-plt.plot(y_pred, y_test, "o")
-plt.show()
+pred = [p for p in np.exp(pred)]
+ids = [id_ for id_ in test_df.Id]
+data = [(id_, pred) for id_, pred in zip(ids, pred)]
+
+submission_df = pd.DataFrame(data=data, columns=["Id", "SalePrice"])
+submission_df.to_csv(SUBMISSION_FILEPATH, index=False)
